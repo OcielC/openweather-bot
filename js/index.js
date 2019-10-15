@@ -42,7 +42,7 @@ app.post('/test', async (req, res) => {
 async function openWeatherApi(query) {
   try {
     const url = 'https://api.openweathermap.org/data/2.5/weather'
-    const apiKey = 'process.env.OPEN_WEATHER_API_KEY' // <-- using the env variable
+    const apiKey = process.env.OPEN_WEATHER_API_KEY // <-- using the env variable
 
     // make api request using axios
     const response = await axios.get(url, {
@@ -57,6 +57,10 @@ async function openWeatherApi(query) {
     return response.data
   } catch (e) {
     console.log(e)
+
+    // "throw" error, which will be "caught"
+    // by the function that called openWeatherApi
+    throw new Error('City not found')
   }
 }
 
@@ -84,12 +88,21 @@ app.post('/weather', async (req, res) => {
     // received from OpenWeather
     const forecast = `Current temperature in ${query} is ${response.main.temp} degrees with a high of ${response.main.temp_max} degrees and a low of ${response.main.temp_min} degrees.`
 
+    // pass weather code from OpenWeather reponse
+    // to getWeatherEmoji() and receive an emoji
+    const emoji = getWeatherEmoji(response.weather[0].id)
+
     // construct an object (according to Slack API docs)
     // that will be used to send a response
     // back to Slack
+    // Add attachments section
+    // (see Slack API docs: https://api.slack.com/docs/message-attachments) to display our emoji and description
     const data = {
       'response_type': 'in_channel',
-      'text': forecast
+      'text': forecast,
+      'attachments': [{
+        'text': `Forecast: ${emoji} ${response.weather[0].description}`
+      }]
     }
 
     // make a POST request (with axios) using "response_url"
@@ -100,5 +113,36 @@ app.post('/weather', async (req, res) => {
     // res.json(data)
   } catch (e) {
     console.log(e)
+
+    // construct an error response to send
+    // to Slack in the case of the user
+    // sending an invalid city
+
+    const errorResponse = {
+      'response_type': 'in_channel',
+      'text': ':confused: Oh oh, there was a problem with your last request. Please make sure you enter a valid city name.'
+    }
+
+    axios.post(req.body.response_url, errorResponse)
   }
 })
+
+function getWeatherEmoji(weatherCode) {
+  if (weatherCode >= 200 && weatherCode <= 299) {
+    return ':thunder_cloud_and_rain:'
+  } else if (weatherCode >= 300 && weatherCode <= 399) {
+    return ':umbrella_with_rain_drops:'
+  } else if (weatherCode >= 500 && weatherCode <= 599) {
+    return ':rain_cloud:'
+  } else if (weatherCode >= 600 && weatherCode <= 699) {
+    return ':snow_cloud:'
+  } else if (weatherCode >= 700 && weatherCode <= 799) {
+    return ':foggy:'
+  } else if (weatherCode === 800) {
+    return ':night_with_stars:'
+  } else if (weatherCode >= 801 && weatherCode <= 899) {
+    return ':sun_behind_cloud:'
+  } else {
+    return ' '
+  }
+}
